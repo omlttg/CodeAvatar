@@ -1,0 +1,22 @@
+{
+  "glossary": {
+    "vi_to_en": {
+      "vibe code": "Vibe Code",
+      "lập trình": "programming",
+      "mô hình": "model",
+      "máy chủ": "server",
+      "giao diện": "interface",
+      "đồng bộ": "synchronization",
+      "bài giảng": "tutorial"
+    },
+    "vi_to_ko": {
+      "vibe code": "바이브 코드 (Vibe Code)",
+      "lập trình": "프로그래밍 (programming)",
+      "mô hình": "모델 (model)",
+      "máy chủ": "서버 (server)",
+      "giao diện": "인터페이스 (interface)",
+      "đồng bộ": "동기화 (synchronization)",
+      "bài giảng": "튜토리얼 (tutorial)"
+    }
+  }
+}
