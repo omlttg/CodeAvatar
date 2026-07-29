@@ -1,0 +1,36 @@
+flowchart LR
+    %% 1. ĐẦU VÀO (INPUT)
+    subgraph INPUT ["1. INPUT (Đầu Vào)"]
+        direction TB
+        In_Audio["File Audio lồng tiếng (.mp3 / .wav)"]
+        In_MC["Mẫu MC chân dung (.png / .mp4)"]
+        In_Crop["Vùng chọn mặt MC (Crop ROI)"]
+        In_Switch["Chế độ Render (CPU Viseme / GPU Wav2Lip)"]
+    end
+
+    %% 2. QUÁ TRÌNH APP XỬ LÝ (PROCESS)
+    subgraph APP_PROCESS ["2. PROCESS (Quá Trình App Xử Lý)"]
+        direction TB
+        P_UI["Web UI: Nhận Upload & Tọa độ Crop"]
+        P_Queue["FastAPI Backend: Đưa Job vào Hàng đợi FIFO"]
+        P_Engine{"Engine Xử Lý"}
+        P_CPU["CPU Engine: Ghép khẩu hình Viseme (2-5s)"]
+        P_GPU["GPU Engine: Wav2Lip AI Neural (CUDA)"]
+        P_Export["FFMPEG: Mã hóa Video VP9 Alpha (yuva420p)"]
+
+        P_UI --> P_Queue --> P_Engine
+        P_Engine -->|CPU Mode| P_CPU --> P_Export
+        P_Engine -->|GPU Mode| P_GPU --> P_Export
+    end
+
+    %% 3. ĐẦU RA (OUTPUT)
+    subgraph OUTPUT ["3. OUTPUT (Đầu Ra)"]
+        direction TB
+        Out_WebM["Video MC ảo nền trong suốt (.webm VP9)"]
+        Out_Edit["Kéo-thả ghép đè bài giảng trong CapCut / Premiere"]
+
+        Out_WebM --> Out_Edit
+    end
+
+    %% LUỒNG KẾT NỐI CHÍNH (INPUT -> PROCESS -> OUTPUT)
+    INPUT ==> APP_PROCESS ==> OUTPUT

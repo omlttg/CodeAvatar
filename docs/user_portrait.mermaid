@@ -1,0 +1,26 @@
+flowchart TD
+    %% Trụ cột 1: MỤC ĐÍCH SỬ DỤNG
+    P1_1["Nhận Audio lồng tiếng + Mẫu MC"] --> P1_2["AI Nhép môi (Viseme CPU / Wav2Lip GPU)"]
+    P1_2 --> P1_3["Xuất Video MC nền trong suốt WebM VP9 Alpha"]
+    P1_3 --> P1["1. MỤC ĐÍCH SỬ DỤNG"]
+
+    %% Trụ cột 2: ĐỐI TƯỢNG NGUỜI DÙNG
+    P2_3["Laptop văn phòng cơ bản (Không GPU rời)"] --> P2_2["Vibe Coders & Nhân viên văn phòng"]
+    P2_2 --> P2_1["Giảng viên & Nhà sáng tạo EdTech"]
+    P2_1 --> P2["2. ĐỐI TƯỢNG NGƯỜI DÙNG"]
+
+    %% Trụ cột 3: LỢI THẾ VƯỢT TRỘI
+    P3_4["100% Offline, Tiêu thụ RAM < 2GB"] --> P3_3["Tối giản: Nhường audio cho CapCut/Premiere"]
+    P3_3 --> P3_1["Nút gạt Hardware Switch (GPU / CPU)"]
+    P3_1 --> P3["3. LỢI THẾ VƯỢT TRỘI"]
+
+    %% Trụ cột 4: GIÁ TRỊ THƯƠNG MẠI
+    P4_3["Đóng gói SDK tích hợp hệ thống LMS / EdTech"] --> P4_2["Mô hình Freemium (Bản Local + Cloud API)"]
+    P4_2 --> P4_1["Giảm 95% chi phí sản xuất bài giảng"]
+    P4_1 --> P4["4. GIÁ TRỊ THƯƠNG MẠI"]
+
+    %% ĐÚC KẾT DỒN VỀ CHÂN DUNG SẢN PHẨM TRUNG TÂM
+    P1 ==> Root["CHÂN DUNG SẢN PHẨM CODEAVATAR"]
+    P2 ==> Root
+    P3 ==> Root
+    P4 ==> Root
