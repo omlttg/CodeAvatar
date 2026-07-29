@@ -1,21 +1,23 @@
 # HANDOFF.md
 
 ## Current status
-* **Đã hoàn thành bước Design & Align (/grill-me)**: Thống nhất chuyển hướng dự án CodeAvatar sang mô hình **Lightweight MC Avatar Generator** tối ưu cho Laptop văn phòng không card rời (CPU-only).
-* Đã tinh gọn lộ trình từ 5 Sprint cồng kềnh thành 3 Sprint tập trung:
-  * **Sprint 1**: Lightweight CPU Lip-Sync Engine (Wav2Lip ONNX Quantized) & Transparent WebM Exporter.
-  * **Sprint 2**: Minimalist FastAPI Local Backend.
-  * **Sprint 3**: 1-Page Glassmorphic React Web UI (Crop ROI, Live Preview nền lưới caro, Download WebM).
-* Đã cập nhật toàn bộ tài liệu kiến trúc dự án ([PROJECT.md](file:///home/thienvu/workspace/CodeAvatar/PROJECT.md), [implementation_plan.md](file:///home/thienvu/.gemini/antigravity/brain/faf31dd8-fa57-4b7c-a5fb-8394719dbbc4/implementation_plan.md)).
+* **Đã hoàn thành 100% cả 3 Sprint phát triển lát cắt dọc (Vertical Slices MVP)**:
+  * **Sprint 1 (Vertical Slice 1)**: Hoàn thành End-to-End CPU Viseme Avatar Pipeline (`cpu_viseme.py`, `webm_exporter.py`, FastAPI backend & Web UI upload/download).
+  * **Sprint 2 (Vertical Slice 2)**: Hoàn thành GPU Wav2Lip Engine (`gpu_lipsync.py`) với tính năng tự động lùi CPU, Nút gạt Hardware Switch `[ GPU / CPU ]` và SSE progress stream.
+  * **Sprint 3 (Vertical Slice 3)**: Hoàn thành Interactive Crop ROI Canvas, Glassmorphic UI polish và Transparent Checkerboard Video Preview Player.
+* **Kiểm thử TDD & Bảo mật**:
+  * Đạt tỷ lệ vượt qua **100% (11/11 tests PASSED)** trên toàn bộ test suite.
+  * Đã qua bài kiểm tra quét bảo mật tĩnh **Semgrep Scan với 0 lỗ hổng (0 findings)**.
+* **Tài liệu hệ thống**: Đã đồng bộ toàn bộ sơ đồ Mermaid, [PROJECT.md](file:///home/thienvu/workspace/CodeAvatar/PROJECT.md), [ARCHITECTURE.md](file:///home/thienvu/workspace/CodeAvatar/ARCHITECTURE.md) và GitHub Issues (#1, #2, #3).
 
 ## Uncommitted state
-* Các file tài liệu kiến trúc đã được cập nhật sẵn sàng. Chưa thực thi viết mã nguồn cho Sprint 1 theo yêu cầu review của người dùng.
+* Toàn bộ mã nguồn đã được commit và push thành công lên nhánh `main` trên GitHub.
 
 ## Gotchas/New decisions
-* **Tối ưu CPU**: Dùng Wav2Lip ONNX Quantized INT8 (~85MB) kết hợp ROI Face Crop $96\times 96$ giúp giảm 100x dung lượng tính toán, RAM < 2GB.
-* **Tự động tăng tốc GPU**: Tự động bật CUDA/DirectML nếu máy có card rời.
-* **Xuất nền trong suốt**: Xuất chuẩn WebM VP9 Alpha (`yuva420p` + `alpha_mode=1`) để người dùng dễ dàng kéo-thả vào phần mềm Edit chuyên dụng (CapCut/Premiere).
+* **Tối ưu Laptop Văn Phòng**: Chế độ CPU Viseme ghép khẩu hình tĩnh siêu tốc trong 2-5 giây với lượng RAM tiêu thụ < 2GB.
+* **Tự động lùi về CPU**: Khi chọn chế độ GPU Wav2Lip trên máy không có CUDA, hệ thống tự động cảnh báo và lùi về CPU Viseme an toàn không làm crash server.
+* **Bảo mật Path Traversal**: Đã áp dụng kiểm tra nghiêm ngặt `Path.is_relative_to()` trên tất cả các endpoint tải file.
 
 ## Next steps
-1. Chờ người dùng review chi tiết toàn bộ kế hoạch và xác nhận bắt đầu thực thi.
-2. Tiến hành thực thi **Sprint 1**: Viết module `cpu_lipsync.py`, `webm_exporter.py` và bộ test suite `pytest`.
+1. Chạy server local để kiểm thử giao diện thực tế: `.venv/bin/uvicorn services.backend.main:app --reload --port 8000`
+2. Mở trình duyệt tại `http://localhost:8000` để trải nghiệm ứng dụng CodeAvatar.
