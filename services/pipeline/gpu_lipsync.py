@@ -40,7 +40,7 @@ class GPULipSyncEngine:
         except ImportError:
             return False
 
-    def process_sequence(self, avatar_image_path: str, audio_bytes: bytes, duration: float = 3.0, crop_roi: dict = None):
+    def process_sequence(self, avatar_image_path: str, audio_bytes: bytes, duration: float = None, crop_roi: dict = None):
         """
         English: Process frame sequence using GPU CUDA Wav2Lip or CPU Viseme fallback.
         Vietnamese: Xử lý chuỗi khung hình bằng GPU CUDA Wav2Lip hoặc lùi về CPU Viseme.

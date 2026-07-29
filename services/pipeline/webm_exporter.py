@@ -58,11 +58,13 @@ class WebMExporter:
                     output_path
                 ]
                 
+                # Dynamic timeout: 30s base + 1s per 25 frames
+                timeout_val = max(30, 30 + int(len(frames) / 25))
                 process = subprocess.run(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    timeout=30
+                    timeout=timeout_val
                 )
                 
                 if process.returncode != 0 or not os.path.exists(output_path):

@@ -105,12 +105,38 @@ class CPUVisemeEngine:
         # Merge layer
         return Image.alpha_composite(frame, overlay)
 
-    def process_sequence(self, avatar_image_path: str, audio_bytes: bytes, duration: float = 3.0, crop_roi: dict = None):
+    def estimate_audio_duration(self, audio_bytes: bytes) -> float:
+        """
+        English: Estimate audio duration in seconds from raw audio bytes.
+        Vietnamese: Ước tính độ dài audio (giây) từ dữ liệu bytes.
+        """
+        if not audio_bytes:
+            return 3.0
+        # Parse WAV header if present
+        if len(audio_bytes) > 44 and audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+            try:
+                channels = int.from_bytes(audio_bytes[22:24], 'little')
+                sample_rate = int.from_bytes(audio_bytes[24:28], 'little')
+                bits_per_sample = int.from_bytes(audio_bytes[34:36], 'little')
+                bytes_per_sec = sample_rate * channels * (bits_per_sample // 8)
+                if bytes_per_sec > 0:
+                    dur = (len(audio_bytes) - 44) / bytes_per_sec
+                    if 0.5 <= dur <= 3600.0:
+                        return dur
+            except Exception:
+                pass
+        # Fallback estimation based on average byte rate (~32KB/s for 16kHz 16-bit mono)
+        dur = len(audio_bytes) / 32000.0
+        return max(1.0, min(dur, 3600.0))
+
+    def process_sequence(self, avatar_image_path: str, audio_bytes: bytes, duration: float = None, crop_roi: dict = None):
         """
         English: Generate full sequence of transparent frames in CPU memory.
         Vietnamese: Sinh toàn bộ chuỗi khung hình nền trong suốt trên bộ nhớ CPU.
         """
         start_time = time.time()
+        if duration is None or duration <= 0:
+            duration = self.estimate_audio_duration(audio_bytes)
         
         if os.path.exists(avatar_image_path):
             base_img = Image.open(avatar_image_path).convert("RGBA")
@@ -137,3 +163,4 @@ class CPUVisemeEngine:
             "render_time_seconds": elapsed,
             "frame_count": len(frames)
         }
+

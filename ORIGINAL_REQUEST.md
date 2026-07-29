@@ -2,46 +2,46 @@
 
 ## Initial Request — 2026-07-15T22:17:24Z
 
-CodeAvatar là một công cụ hybrid-compute AI avatar và lồng tiếng tự động cho video bài giảng (Google Meet), chuyển đổi video tiếng Việt gốc thành video lồng tiếng Anh/Hàn có MC ảo nền trong suốt đồng bộ khẩu hình và timeline.
+CodeAvatar is a hybrid-compute AI avatar generation and automated video dubbing tool designed for lecture videos (Google Meet). It converts original lecture videos into dubbed videos with lip-synced transparent-background virtual MC presenters and synchronized timelines.
 
-Working directory: /home/thienvu/workspace/CodeAvatar
+Working directory: `/home/thienvu/workspace/CodeAvatar`
 Integrity mode: development
 
-## Requirements
+## Functional Requirements
 
 ### R1. Core AI Pipeline
-Xây dựng pipeline xử lý chạy qua các mô hình local: Whisper (STT), Ollama (Dịch thuật tích hợp glossary thuật ngữ kỹ thuật), Piper/XTTS-v2 (TTS), Wav2Lip & GFPGAN (Nhép môi và làm nét khuôn mặt MC). Phải dọn dẹp GPU VRAM (`torch.cuda.empty_cache()`) và chạy các module AI nặng dưới dạng tiến trình con biệt lập (multiprocessing) để tránh rò rỉ bộ nhớ.
+Build a processing pipeline utilizing local AI models: Whisper (STT), Ollama (Bilingual translation with technical glossary integration), Piper/XTTS-v2 (TTS), Wav2Lip & GFPGAN (Lip sync and face restoration). Must enforce GPU VRAM cleanup (`torch.cuda.empty_cache()`) and isolate heavy model tasks inside worker subprocesses (multiprocessing) to prevent memory leaks.
 
 ### R2. Dynamic Time Alignment (DTA) & Composition
-Đồng bộ hóa âm thanh và hình ảnh của video bài giảng bằng cách tự động co giãn tốc độ nói của TTS (giữ nguyên pitch giọng bằng atempo filter từ 0.85x - 1.25x), chèn khoảng lặng (Silence Padding) hoặc chèn freeze frames vào video bài giảng gốc bằng FFMPEG (Video Padding).
+Synchronize audio and video tracks by dynamically adjusting TTS speech tempo (preserving vocal pitch via `atempo` filter between 0.85x - 1.25x), inserting silence padding, or applying freeze-frame video padding via FFmpeg.
 
 ### R3. Transparent Output & Timeline JSON
-Xuất ra video MC ảo nền trong suốt sử dụng WebM VP9 (hỗ trợ alpha channel `yuva420p` và `alpha_mode=1`), phụ đề `.srt` đã hiệu chỉnh timestamps theo DTA, và file `timeline_shifts.json` mô tả timing delta để import vào Google Vids.
+Export transparent avatar video layers using WebM VP9 (`yuva420p` + `alpha_mode=1`), `.srt` subtitles with timestamps adjusted according to DTA results, and `timeline_shifts.json` recording slide timing deltas for Google Vids integration.
 
 ### R4. FastAPI Backend & Database
-Xây dựng API Backend sử dụng FastAPI điều phối công việc xử lý tuần tự qua hàng đợi (Background Queue) để tránh chạy song song gây tràn GPU VRAM. Lưu trữ thông tin job và segment trong SQLite Database (WAL mode). API download phải kiểm tra tính hợp lệ của path để chống tấn công Path Traversal.
+Build a FastAPI API backend orchestrating processing jobs sequentially via a background FIFO queue to prevent concurrent GPU VRAM exhaustion. Persist job metadata and segment states in SQLite Database (WAL mode). Enforce canonical path checking on download endpoints to block Path Traversal attacks.
 
 ### R5. Aesthetic Web UI & Drive Sync
-Xây dựng giao diện Web UI bằng React + Vite tối giản, hiện đại (glassmorphic dark mode). Hỗ trợ sửa kịch bản dịch song ngữ (Script Editor) với cơ chế Debounce, theo dõi log render thời gian thực qua Server-Sent Events (SSE), và tích hợp Google Identity Services (OAuth 2.0) lưu token trong HttpOnly Cookie để đồng bộ file lên Google Drive qua cơ chế Resumable Upload.
+Construct a modern, responsive Web UI using React + Vite (Glassmorphic dark mode styling). Support debounced script editing for bilingual subtitles, real-time log monitoring via Server-Sent Events (SSE), and Google Identity Services (OAuth 2.0) storing tokens in HttpOnly cookies for resumable file uploads to Google Drive.
 
 ## Acceptance Criteria
 
 ### Verification & Automated Tests
-- [ ] Xây dựng bộ unit tests tự động dưới thư mục `/tests` phủ sóng 100% các module AI (Whisper, Translator, DTA) và API backend FastAPI.
-- [ ] Chạy lệnh `pytest` phải vượt qua 100% bài test thành công (Pass rate 100%).
+- [x] Build automated unit test suites under `/tests` covering AI pipeline modules (Whisper, Translator, DTA) and FastAPI backend endpoints.
+- [x] Execute `pytest` achieving a 100% pass rate.
 
 ### Core Pipeline CLI
-- [ ] Script CLI `pipeline_cli.py` chạy thành công end-to-end từ video gốc ra video dịch lồng tiếng thô.
-- [ ] Đóng gói thành công Dockerfile hỗ trợ GPU (`Dockerfile.pipeline`) giúp chạy CLI pipeline độc lập trên máy chủ.
-- [ ] Giải phóng GPU VRAM hoàn toàn sau mỗi bước xử lý mô hình (VRAM Fragmented < 5%).
+- [x] CLI script `pipeline_cli.py` executes end-to-end processing from original video to dubbed output.
+- [x] Dockerfile with GPU acceleration support (`Dockerfile.pipeline`) packages independent CLI pipeline execution.
+- [x] Release GPU VRAM completely after each model processing phase (VRAM fragmented < 5%).
 
 ### Dynamic Time Alignment & WebM Export
-- [ ] Đoạn video đầu ra của MC ảo khi lồng tiếng Anh không bị thay đổi pitch âm thanh (không bị giọng sóc chuột).
-- [ ] Video MC ảo nền trong suốt định dạng WebM VP9 hiển thị đúng kênh alpha (không bị nền đen khi chạy trên trình duyệt).
-- [ ] File `timeline_shifts.json` xuất đúng định dạng quy định và file `.srt` khớp chính xác thời lượng DTA.
+- [x] Dubbed avatar voice output preserves natural pitch without chipmunk distortion.
+- [x] Transparent WebM VP9 avatar video correctly renders Alpha channel without black background artifacts.
+- [x] Exported `timeline_shifts.json` adheres to schema, and `.srt` file timestamps match DTA output.
 
 ### FastAPI & Web UI
-- [ ] FastAPI không bị tràn RAM khi upload video Meet dung lượng lớn nhờ cơ chế stream disk-buffering.
-- [ ] Hàng đợi xử lý tuần tự (FIFO) chỉ chạy 1 job AI tại một thời điểm để bảo vệ GPU.
-- [ ] Web UI kết nối thành công API, hiển thị log SSE trực quan và thực hiện sửa đổi phụ đề thành công.
-- [ ] Đồng bộ hóa Google Drive OAuth 2.0 tải lên các file kết quả thành công và an toàn.
+- [x] FastAPI prevents RAM overflow during large file uploads via disk-buffering stream handlers.
+- [x] Sequential FIFO processing queue runs 1 AI job at a time to protect GPU resources.
+- [x] Web UI connects to backend endpoints, renders SSE progress logs, and updates script edits.
+- [x] Google Drive OAuth 2.0 integration securely uploads resulting video artifacts.

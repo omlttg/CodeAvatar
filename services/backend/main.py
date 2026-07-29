@@ -7,6 +7,7 @@ Vietnamese: Server backend hoàn chỉnh cho CodeAvatar hỗ trợ dual engine, 
 """
 
 import os
+import time
 import uuid
 import json
 import asyncio
@@ -25,7 +26,7 @@ app = FastAPI(title="CodeAvatar API", version="3.0.0")
 # Restrict CORS origins to local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,16 +39,16 @@ JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 JOBS_REGISTRY = {}
 
-async def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, mode: str, crop_roi: dict):
+def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, mode: str, crop_roi: dict):
     """
-    English: Background job worker for dual render engine and crop ROI bounding box.
-    Vietnamese: Worker xử lý job nền cho cả 2 engine render và tọa độ crop ROI.
+    English: Background job worker running in threadpool for dual render engine and crop ROI bounding box.
+    Vietnamese: Worker xử lý job nền trên threadpool cho cả 2 engine render và tọa độ crop ROI.
     """
     try:
         JOBS_REGISTRY[job_id]["status"] = "processing"
         JOBS_REGISTRY[job_id]["progress"] = 15
         JOBS_REGISTRY[job_id]["message"] = f"Job initialized in '{mode}' mode."
-        await asyncio.sleep(0.1)
+        time.sleep(0.1)
 
         if mode == "gpu_wav2lip":
             engine = GPULipSyncEngine()
@@ -56,18 +57,18 @@ async def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, 
 
         JOBS_REGISTRY[job_id]["progress"] = 40
         JOBS_REGISTRY[job_id]["message"] = f"Applying ROI Crop {crop_roi} & generating lip-sync..."
-        await asyncio.sleep(0.1)
+        time.sleep(0.1)
 
         result = engine.process_sequence(
             avatar_image_path=avatar_path,
             audio_bytes=audio_bytes,
-            duration=3.0,
+            duration=None,
             crop_roi=crop_roi
         )
 
         JOBS_REGISTRY[job_id]["progress"] = 75
         JOBS_REGISTRY[job_id]["message"] = "Encoding WebM VP9 Alpha transparent layer..."
-        await asyncio.sleep(0.1)
+        time.sleep(0.1)
 
         exporter = WebMExporter()
         output_file = str(JOBS_DIR / f"{job_id}_transparent.webm")
@@ -205,6 +206,14 @@ async def download_webm(job_id: str):
         media_type="video/webm"
     )
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """
+    English: Silence favicon 404 errors.
+    Vietnamese: Xử lý favicon 404 để tránh làm rác log server.
+    """
+    return HTMLResponse(content="", status_code=204)
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
     """
@@ -221,7 +230,7 @@ async def serve_ui():
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             * { box-sizing: border-box; }
-            body { font-family: 'Inter', sans-serif; background: #090d16; color: #f8fafc; margin: 0; padding: 2rem; display: flex; justify-content: center; }
+            body { font-family: 'Inter', sans-serif; background: #090d16; color: #f8fafc; margin: 0; padding: 2rem; display: flex; justify-content: center; min-height: 100vh; }
             .card { background: rgba(30, 41, 59, 0.65); backdrop-filter: blur(20px); border-radius: 20px; padding: 2.5rem; max-width: 720px; width: 100%; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 60px rgba(0,0,0,0.7); }
             h1 { font-size: 2rem; background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 0.5rem 0; font-weight: 700; }
             p.subtitle { color: #94a3b8; font-size: 0.95rem; margin-bottom: 2rem; }
@@ -238,9 +247,9 @@ async def serve_ui():
             
             /* Interactive Canvas Crop ROI */
             #canvasContainer { margin-top: 1rem; position: relative; display: none; background: #0f172a; border-radius: 12px; padding: 1rem; border: 1px dashed #475569; text-align: center; }
-            canvas { max-width: 100%; border-radius: 8px; cursor: crosshair; }
+            canvas { max-width: 100%; border-radius: 8px; cursor: crosshair; touch-action: none; }
             
-            button.submit-btn { margin-top: 2rem; width: 100%; padding: 1rem; background: linear-gradient(135deg, #0284c7, #6366f1); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 1.05rem; cursor: pointer; transition: transform 0.15 ease, box-shadow 0.15s ease; box-shadow: 0 8px 24px rgba(2, 132, 199, 0.3); }
+            button.submit-btn { margin-top: 2rem; width: 100%; padding: 1rem; background: linear-gradient(135deg, #0284c7, #6366f1); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 1.05rem; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; box-shadow: 0 8px 24px rgba(2, 132, 199, 0.3); }
             button.submit-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
             
             /* Progress & Preview Player */
@@ -253,6 +262,20 @@ async def serve_ui():
             video { max-width: 100%; border-radius: 8px; }
             .download-btn { display: inline-block; margin-top: 1rem; padding: 0.8rem 1.5rem; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 700; }
             .download-btn:hover { background: #059669; }
+
+            /* Mobile Responsiveness Rules */
+            @media (max-width: 640px) {
+                body { padding: 0.75rem; }
+                .card { padding: 1.25rem 1rem; border-radius: 16px; width: 100%; }
+                h1 { font-size: 1.4rem; }
+                p.subtitle { font-size: 0.85rem; margin-bottom: 1.2rem; }
+                .switch-box { flex-direction: column; align-items: stretch; gap: 0.75rem; padding: 0.75rem 1rem; }
+                .switch-title { text-align: center; }
+                .toggle-btns { width: 100%; }
+                .toggle-btn { flex: 1; text-align: center; padding: 0.65rem 0.5rem; font-size: 0.8rem; }
+                input[type="file"] { font-size: 0.85rem; padding: 0.6rem; }
+                button.submit-btn { padding: 0.85rem; font-size: 0.95rem; }
+            }
         </style>
     </head>
     <body>
@@ -278,7 +301,7 @@ async def serve_ui():
 
                 <!-- Interactive Crop ROI Canvas -->
                 <div id="canvasContainer">
-                    <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:0.5rem;">Kéo chuột trên ảnh để chọn vùng khuôn mặt MC (Crop ROI):</div>
+                    <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:0.5rem;">Kéo chuột/chạm trên ảnh để chọn vùng khuôn mặt MC (Crop ROI):</div>
                     <canvas id="cropCanvas"></canvas>
                 </div>
 
@@ -311,7 +334,7 @@ async def serve_ui():
                 document.getElementById('btnGPU').classList.toggle('active', mode === 'gpu_wav2lip');
             }
 
-            // Canvas Crop ROI Selection Logic
+            // Canvas Crop ROI Selection Logic with Touch Support
             const avatarInput = document.getElementById('avatarInput');
             const canvasContainer = document.getElementById('canvasContainer');
             const canvas = document.getElementById('cropCanvas');
@@ -336,33 +359,48 @@ async def serve_ui():
                 }
             };
 
-            canvas.onmousedown = (e) => {
+            function getCanvasCoords(e) {
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
-                startX = (e.clientX - rect.left) * scaleX;
-                startY = (e.clientY - rect.top) * scaleY;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            }
+
+            function handleStart(e) {
+                if (e.touches && e.touches.length > 1) return;
+                const coords = getCanvasCoords(e);
+                startX = coords.x;
+                startY = coords.y;
                 isDrawing = true;
-            };
+            }
 
-            canvas.onmousemove = (e) => {
+            function handleMove(e) {
                 if (!isDrawing) return;
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const currX = (e.clientX - rect.left) * scaleX;
-                const currY = (e.clientY - rect.top) * scaleY;
-
+                if (e.touches) e.preventDefault();
+                const coords = getCanvasCoords(e);
                 ctx.drawImage(imgObj, 0, 0);
                 ctx.strokeStyle = '#38bdf8';
                 ctx.lineWidth = 3;
-                const w = currX - startX;
-                const h = currY - startY;
+                const w = coords.x - startX;
+                const h = coords.y - startY;
                 ctx.strokeRect(startX, startY, w, h);
-                cropRoi = { x: Math.min(startX, currX), y: Math.min(startY, currY), w: Math.abs(w), h: Math.abs(h) };
-            };
+                cropRoi = { x: Math.min(startX, coords.x), y: Math.min(startY, coords.y), w: Math.abs(w), h: Math.abs(h) };
+            }
 
-            canvas.onmouseup = () => { isDrawing = false; };
+            function handleEnd() { isDrawing = false; }
+
+            canvas.addEventListener('mousedown', handleStart);
+            canvas.addEventListener('mousemove', handleMove);
+            canvas.addEventListener('mouseup', handleEnd);
+
+            canvas.addEventListener('touchstart', handleStart, { passive: false });
+            canvas.addEventListener('touchmove', handleMove, { passive: false });
+            canvas.addEventListener('touchend', handleEnd);
 
             // Submit Handler
             document.getElementById('avatarForm').onsubmit = async (e) => {

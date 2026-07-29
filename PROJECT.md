@@ -1,42 +1,46 @@
 # Project: CodeAvatar System Design (Dual-Engine MC Avatar Generator)
 
 ## Architecture Overview
-CodeAvatar được thiết kế thành một ứng dụng lai (hybrid) đa chế độ render, chia thành 3 Sprint theo mô hình **lát cắt dọc hoàn chỉnh (Vertical Slices)**:
-1. **Vertical Slice 1 (Sprint 1)**: End-to-End CPU Viseme Pipeline (Web UI + FastAPI + Engine Viseme 2-5s + WebM Alpha download).
+CodeAvatar is designed as a hybrid-compute application supporting dual rendering modes, structured across 3 Sprints using the **Vertical Slice Architecture** model:
+1. **Vertical Slice 1 (Sprint 1)**: End-to-End CPU Viseme Pipeline (Web UI + FastAPI + CPU Viseme Engine 2-5s + WebM Alpha download).
 2. **Vertical Slice 2 (Sprint 2)**: End-to-End GPU Wav2Lip CUDA Engine + Hardware Switch `[ GPU / CPU ]` + SSE Real-time Progress Stream.
-3. **Vertical Slice 3 (Sprint 3)**: End-to-End Interactive Crop ROI Canvas + Glassmorphic UI Polish + Transparent Checkerboard Preview.
+3. **Vertical Slice 3 (Sprint 3)**: End-to-End Interactive Crop ROI Canvas + Glassmorphic UI Polish + Transparent Checkerboard Preview Player.
 
 ## Code Layout
 ```text
 /home/thienvu/workspace/CodeAvatar
   ├── /apps
-  │    └── /web               # Web UI 1-Page (React/Vite) với Hardware Switch (GPU/CPU) & Crop ROI Canvas
+  │    └── /web               # Single-Page Web UI (React/Vite) with Hardware Switch (GPU/CPU) & Crop ROI Canvas
   ├── /services
-  │    └── /pipeline          # Engine Render (CPU Viseme & GPU Wav2Lip)
+  │    └── /pipeline          # Rendering Engines (CPU Viseme & GPU Wav2Lip)
   │         ├── cpu_viseme.py
   │         ├── gpu_lipsync.py
   │         └── webm_exporter.py
-  │    └── /backend           # Backend FastAPI điều phối jobs
+  │    └── /backend           # Backend FastAPI Job Orchestrator Service
   │         └── main.py
-  ├── /tests                  # Bộ kiểm thử tự động (Unit, Integration & E2E tests)
-  ├── PROJECT.md              # Tài liệu thiết kế hệ thống tổng quan
-  ├── ORIGINAL_REQUEST.md     # Nhật ký yêu cầu ban đầu
-  └── HANDOFF.md              # Nhật ký bàn giao tiến độ
+  ├── /tests                  # Automated Test Suite (Unit, Integration & E2E Tests)
+  ├── /test                   # Local Test Assets Storage (Git-Ignored)
+  ├── README.md               # Main Project Documentation
+  ├── PROJECT.md              # System Design Overview
+  ├── ARCHITECTURE.md         # Technical Architecture & Interface Contracts
+  ├── TEST_INFRA.md           # 4-Tier Test Infrastructure Specification
+  ├── ORIGINAL_REQUEST.md     # Initial Requirements Log
+  └── HANDOFF.md              # Developer Session Handoff Log
 ```
 
 ## Milestones (Vertical Slices)
 | # | Sprint Name | Scope (Vertical Slice End-to-End) | Dependencies | Status |
 |---|-------------|-----------------------------------|--------------|--------|
-| 1 | Basic End-to-End CPU Viseme Avatar Pipeline (Vertical Slice 1) | Web UI Upload + FastAPI API + Engine CPU Viseme (2-5s) + FFMPEG VP9 Alpha WebM download. Tối ưu cho mọi laptop văn phòng. | None | PLANNED |
-| 2 | High-Quality GPU Wav2Lip & Hardware Switch (Vertical Slice 2) | Hardware Switch `[ GPU / CPU ]` + Engine GPU Wav2Lip CUDA + SSE Real-time Progress Stream + Tự động lùi CPU nếu thiếu GPU. | Sprint 1 | PLANNED |
-| 3 | Interactive Crop ROI Canvas & Glassmorphic UI Polish (Vertical Slice 3) | Canvas Crop ROI chọn vị trí mặt MC + Player xem trước nền lưới caro trong suốt + Đánh bóng giao diện Glassmorphism. | Sprint 2 | PLANNED |
+| 1 | Basic End-to-End CPU Viseme Avatar Pipeline (Vertical Slice 1) | Web UI Upload + FastAPI Backend + CPU Viseme Engine (2-5s) + FFmpeg VP9 Alpha WebM download. Optimized for standard office laptops. | None | COMPLETED |
+| 2 | High-Quality GPU Wav2Lip & Hardware Switch (Vertical Slice 2) | Hardware Switch `[ GPU / CPU ]` + GPU Wav2Lip CUDA Engine + SSE Real-time Progress Stream + Automatic CPU fallback on missing GPU. | Sprint 1 | COMPLETED |
+| 3 | Interactive Crop ROI Canvas & Glassmorphic UI Polish (Vertical Slice 3) | Interactive Canvas Crop ROI face position selector + Transparent checkerboard preview player + Glassmorphism UI Polish. | Sprint 2 | COMPLETED |
 
 ## Interface Contracts
 ### Input / Output
-- Đầu vào: File Audio (`.wav`/`.mp3`), Mẫu MC (`.png`/`.jpg` hoặc `.mp4`), Khung tọa độ Crop ROI, Chế độ Render (`cpu_viseme` / `gpu_wav2lip`).
-- Đầu ra: Layer Video MC ảo nền trong suốt chuẩn WebM VP9 (`yuva420p` + `alpha_mode=1`).
+- **Inputs**: Audio file (`.wav` / `.mp3`), Avatar Template (`.png` / `.jpg` or `.mp4`), Crop ROI bounding box coordinates, Render Mode (`cpu_viseme` / `gpu_wav2lip`).
+- **Outputs**: Virtual MC Avatar Video Layer with transparent background in standard WebM VP9 format (`yuva420p` + `alpha_mode=1`).
 
 ### FastAPI API Endpoints
-- `POST /api/generate-avatar`: Upload audio & mẫu MC + tọa độ crop + `mode` (`cpu_viseme` | `gpu_wav2lip`). Trả về Job ID.
-- `GET /api/jobs/{job_id}/stream`: Luồng log tiến độ thời gian thực (SSE stream).
-- `GET /api/jobs/{job_id}/download`: Tải file WebM nền trong suốt.
+- `POST /api/generate-avatar`: Upload audio & avatar template + crop coordinates + `mode` (`cpu_viseme` | `gpu_wav2lip`). Returns `job_id`.
+- `GET /api/jobs/{job_id}/stream`: Real-time Server-Sent Events (SSE) progress log stream.
+- `GET /api/jobs/{job_id}/download`: Download transparent WebM output file.
