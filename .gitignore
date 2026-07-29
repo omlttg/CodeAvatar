@@ -2,6 +2,13 @@
 AGENT.md
 ARCHITECTURE.md
 
+# Storage & Temporary Files
+storage/
+*.webm
+*.png
+*.jpg
+*.mp4
+
 # Portable binaries & envs
 bin/
 .venv/
