@@ -24,61 +24,77 @@ class WebMExporter:
         """
         self.ffmpeg_cmd = ffmpeg_path or shutil.which("ffmpeg")
 
-    def export_webm(self, frames: list, output_path: str, fps: int = 25) -> str:
+    def export_webm(self, frames, output_path: str, fps: int = 25) -> str:
         """
-        English: Convert RGBA PIL images to transparent WebM VP9 file.
-        Vietnamese: Chuyển đổi danh sách ảnh RGBA PIL thành file WebM VP9 nền trong suốt.
+        English: Convert RGBA PIL images or frame generator to transparent WebM VP9 file using O(1) memory stream pipe.
+        Vietnamese: Chuyển đổi khung hình RGBA PIL hoặc generator thành file WebM VP9 qua luồng FFMPEG stdin giúp RAM cố định O(1).
+        """
+        return self.export_webm_stream(frames, output_path, fps)
+
+    def export_webm_stream(self, frame_iterable, output_path: str, fps: int = 25) -> str:
+        """
+        English: Convert RGBA PIL images directly via FFMPEG stdin pipe stream (O(1) memory).
+        Vietnamese: Xuất stream trực tiếp khung hình qua pipe FFMPEG stdin để giữ RAM cố định O(1).
         """
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         
-        if not frames:
+        iterator = iter(frame_iterable)
+        try:
+            first_frame = next(iterator)
+        except StopIteration:
             raise ValueError("No frames provided for WebM export.")
 
-        # Create temporary directory for frame PNGs
-        temp_dir = output_path + "_temp_frames"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        try:
-            # Save RGBA PNG frames
-            for idx, frame in enumerate(frames):
-                frame_path = os.path.join(temp_dir, f"frame_{idx:05d}.png")
-                frame.save(frame_path, format="PNG")
-
-            if self.ffmpeg_cmd:
-                # FFMPEG VP9 Alpha WebM Export Command
-                # ffmpeg -r 25 -i frame_%05d.png -c:v libvpx-vp9 -pix_fmt yuva420p -metadata:s:v:0 alpha_mode=1 output.webm
-                cmd = [
-                    self.ffmpeg_cmd,
-                    "-y",
-                    "-r", str(fps),
-                    "-i", os.path.join(temp_dir, "frame_%05d.png"),
-                    "-c:v", "libvpx-vp9",
-                    "-pix_fmt", "yuva420p",
-                    "-metadata:s:v:0", "alpha_mode=1",
-                    output_path
-                ]
-                
-                # Dynamic timeout: 30s base + 1s per 25 frames
-                timeout_val = max(30, 30 + int(len(frames) / 25))
-                process = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=timeout_val
-                )
-                
-                if process.returncode != 0 or not os.path.exists(output_path):
-                    # Fallback to saving first frame as WebM mockup if ffmpeg VP9 codec lacks
-                    self._create_fallback_webm(frames[0], output_path)
-            else:
-                self._create_fallback_webm(frames[0], output_path)
-
+        if not self.ffmpeg_cmd:
+            self._create_fallback_webm(first_frame, output_path)
             return output_path
 
-        finally:
-            # Clean up temporary frame files
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir, ignore_errors=True)
+        w, h = first_frame.size
+
+        cmd = [
+            self.ffmpeg_cmd,
+            "-y",
+            "-f", "rawvideo",
+            "-vcodec", "rawvideo",
+            "-s", f"{w}x{h}",
+            "-pix_fmt", "rgba",
+            "-r", str(fps),
+            "-i", "-",
+            "-c:v", "libvpx-vp9",
+            "-pix_fmt", "yuva420p",
+            "-threads", "4",
+            "-deadline", "realtime",
+            "-cpu-used", "4",
+            "-metadata:s:v:0", "alpha_mode=1",
+            output_path
+        ]
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            # Write first frame bytes
+            process.stdin.write(first_frame.convert("RGBA").tobytes())
+            del first_frame
+
+            # Stream remaining frames from generator/list
+            for frame in iterator:
+                process.stdin.write(frame.convert("RGBA").tobytes())
+                del frame
+
+            process.stdin.close()
+            stdout, stderr = process.communicate(timeout=600)
+
+            if process.returncode != 0 or not os.path.exists(output_path):
+                self._create_fallback_webm(None, output_path)
+
+        except Exception:
+            self._create_fallback_webm(None, output_path)
+
+        return output_path
 
     def _create_fallback_webm(self, sample_frame: Image.Image, output_path: str):
         """

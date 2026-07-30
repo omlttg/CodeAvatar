@@ -39,24 +39,42 @@ JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 JOBS_REGISTRY = {}
 
+def add_job_log(job_id: str, level: str, message: str):
+    """
+    English: Append timestamped log entry to job registry for SSE streaming.
+    Vietnamese: Ghi nhận log kèm mốc thời gian vào registry cho luồng SSE phát trực tiếp.
+    """
+    timestamp = time.strftime("%H:%M:%S")
+    entry = {"time": timestamp, "level": level, "message": message}
+    if job_id in JOBS_REGISTRY:
+        if "logs" not in JOBS_REGISTRY[job_id]:
+            JOBS_REGISTRY[job_id]["logs"] = []
+        JOBS_REGISTRY[job_id]["logs"].append(entry)
+
 def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, mode: str, crop_roi: dict):
     """
-    English: Background job worker running in threadpool for dual render engine and crop ROI bounding box.
-    Vietnamese: Worker xử lý job nền trên threadpool cho cả 2 engine render và tọa độ crop ROI.
+    English: Background job worker running in threadpool with full step-by-step logging.
+    Vietnamese: Worker xử lý job nền trên threadpool kèm ghi log chi tiết từng bước.
     """
     try:
         JOBS_REGISTRY[job_id]["status"] = "processing"
-        JOBS_REGISTRY[job_id]["progress"] = 15
+        JOBS_REGISTRY[job_id]["progress"] = 10
         JOBS_REGISTRY[job_id]["message"] = f"Job initialized in '{mode}' mode."
+        add_job_log(job_id, "INFO", f"[1/4] Job initialized in '{mode}' mode. Audio size: {len(audio_bytes)/1024:.1f} KB.")
         time.sleep(0.1)
 
         if mode == "gpu_wav2lip":
+            add_job_log(job_id, "INFO", "Detecting NVIDIA CUDA GPU hardware acceleration...")
             engine = GPULipSyncEngine()
+            if not engine.has_cuda:
+                add_job_log(job_id, "WARN", "NVIDIA CUDA GPU not detected. Automatically falling back to Ultra-Fast CPU Viseme Engine.")
         else:
+            add_job_log(job_id, "INFO", "Initializing Ultra-Fast CPU Viseme Engine...")
             engine = CPUVisemeEngine()
 
-        JOBS_REGISTRY[job_id]["progress"] = 40
-        JOBS_REGISTRY[job_id]["message"] = f"Applying ROI Crop {crop_roi} & generating lip-sync..."
+        JOBS_REGISTRY[job_id]["progress"] = 35
+        JOBS_REGISTRY[job_id]["message"] = "Extracting audio visemes & applying ROI Crop..."
+        add_job_log(job_id, "INFO", f"[2/4] Applying ROI Crop {crop_roi} & extracting audio viseme timeline...")
         time.sleep(0.1)
 
         result = engine.process_sequence(
@@ -66,8 +84,13 @@ def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, mode: 
             crop_roi=crop_roi
         )
 
-        JOBS_REGISTRY[job_id]["progress"] = 75
+        add_job_log(job_id, "INFO", f"Rendered {result['frame_count']} viseme frames at {result.get('fps', 25)} FPS ({result['render_time_seconds']:.2f}s).")
+        if result.get("fallback_notice"):
+            add_job_log(job_id, "WARN", f"Notice: {result['fallback_notice']}")
+
+        JOBS_REGISTRY[job_id]["progress"] = 70
         JOBS_REGISTRY[job_id]["message"] = "Encoding WebM VP9 Alpha transparent layer..."
+        add_job_log(job_id, "INFO", "[3/4] Streaming RGBA frames into FFMPEG WebM VP9 Alpha Encoder...")
         time.sleep(0.1)
 
         exporter = WebMExporter()
@@ -81,11 +104,15 @@ def process_avatar_job(job_id: str, audio_bytes: bytes, avatar_path: str, mode: 
         JOBS_REGISTRY[job_id]["message"] = "Render completed successfully!"
         if result.get("fallback_notice"):
             JOBS_REGISTRY[job_id]["message"] += f" ({result['fallback_notice']})"
+        add_job_log(job_id, "SUCCESS", f"[4/4] WebM VP9 Alpha video rendered & exported to {output_file}.")
 
     except Exception as e:
+        import traceback
+        tb_msg = traceback.format_exc()
         JOBS_REGISTRY[job_id]["status"] = "failed"
         JOBS_REGISTRY[job_id]["error"] = str(e)
         JOBS_REGISTRY[job_id]["message"] = f"Failed: {e}"
+        add_job_log(job_id, "ERROR", f"Render Failed: {e}\nTraceback:\n{tb_msg}")
 
 @app.post("/api/generate-avatar")
 async def generate_avatar(
@@ -124,8 +151,10 @@ async def generate_avatar(
         "message": "Job queued.",
         "avatar_path": avatar_save_path,
         "output_path": None,
-        "error": None
+        "error": None,
+        "logs": []
     }
+    add_job_log(job_id, "INFO", f"Received avatar request. Input avatar saved to {avatar_save_path}.")
 
     background_tasks.add_task(
         process_avatar_job,
@@ -151,8 +180,8 @@ async def get_job_status(job_id: str):
 @app.get("/api/jobs/{job_id}/stream")
 async def stream_job_progress(job_id: str):
     """
-    English: SSE Endpoint to stream real-time progress events.
-    Vietnamese: SSE Endpoint phát luồng log tiến độ thời gian thực.
+    English: SSE Endpoint to stream real-time progress events and live logs.
+    Vietnamese: SSE Endpoint phát luồng log và tiến độ thời gian thực.
     """
     if job_id not in JOBS_REGISTRY:
         raise HTTPException(status_code=404, detail="Job ID not found.")
@@ -165,13 +194,14 @@ async def stream_job_progress(job_id: str):
             data = json.dumps({
                 "status": job_info["status"],
                 "progress": job_info["progress"],
-                "message": job_info.get("message", "")
+                "message": job_info.get("message", ""),
+                "logs": job_info.get("logs", [])
             })
             yield {"event": "progress", "data": data}
 
             if job_info["status"] in ["completed", "failed"]:
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
 
     return EventSourceResponse(event_generator())
 
@@ -257,6 +287,27 @@ async def serve_ui():
             .bar-bg { width: 100%; height: 10px; background: #334155; border-radius: 5px; overflow: hidden; margin: 1rem 0; }
             .bar-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); width: 0%; transition: width 0.3s ease; }
             
+            /* Terminal Live Console Component */
+            .terminal-console {
+                margin-top: 0.5rem;
+                background: #020617;
+                border: 1px solid #1e293b;
+                border-radius: 10px;
+                padding: 0.85rem;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 0.82rem;
+                max-height: 180px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);
+                text-align: left;
+            }
+            .log-entry { margin-bottom: 0.25rem; line-height: 1.35; }
+            .log-INFO { color: #38bdf8; }
+            .log-WARN { color: #f59e0b; }
+            .log-SUCCESS { color: #10b981; }
+            .log-ERROR { color: #ef4444; font-weight: bold; }
+
             /* Transparent Checkerboard Player */
             .checkerboard-player { margin-top: 1.5rem; background-image: conic-gradient(#334155 90deg, #1e293b 90deg 180deg, #334155 180deg 270deg, #1e293b 270deg); background-size: 20px 20px; border-radius: 12px; padding: 1rem; text-align: center; border: 1px solid #475569; }
             video { max-width: 100%; border-radius: 8px; }
@@ -311,7 +362,13 @@ async def serve_ui():
             <div id="progressSection">
                 <div id="statusMsg" style="font-weight:600;">⏳ Đang khởi tạo...</div>
                 <div class="bar-bg"><div class="bar-fill" id="barFill"></div></div>
-                
+
+                <!-- Live Terminal Console Log Panel -->
+                <div style="font-size:0.85rem; color:#94a3b8; margin-top:1rem; font-weight:600;">💻 Terminal Live Execution Log (Console Debug):</div>
+                <div class="terminal-console" id="consoleLog">
+                    <div class="log-entry log-INFO">[00:00:00] [SYSTEM] Sẵn sàng nhận job...</div>
+                </div>
+
                 <!-- Preview Player with Checkerboard Background -->
                 <div id="previewArea" style="display:none;" class="checkerboard-player">
                     <div style="font-size:0.85rem; color:#cbd5e1; margin-bottom:0.5rem;">📺 Xem trước MC ảo nền trong suốt (Lưới caro):</div>
@@ -409,11 +466,13 @@ async def serve_ui():
                 const statusMsg = document.getElementById('statusMsg');
                 const barFill = document.getElementById('barFill');
                 const previewArea = document.getElementById('previewArea');
+                const consoleLog = document.getElementById('consoleLog');
 
                 progressSection.style.display = 'block';
                 previewArea.style.display = 'none';
                 statusMsg.innerText = '⏳ Đang tải tệp lên server...';
                 barFill.style.width = '10%';
+                consoleLog.innerHTML = '<div class="log-entry log-INFO">[INIT] Đang gửi yêu cầu render lên Backend API...</div>';
 
                 const formData = new FormData();
                 formData.append('audio', document.getElementById('audioInput').files[0]);
@@ -434,6 +493,14 @@ async def serve_ui():
                         barFill.style.width = evtData.progress + '%';
                         statusMsg.innerText = `⚙️ [${evtData.progress}%] ${evtData.message}`;
 
+                        if (evtData.logs && evtData.logs.length > 0) {
+                            consoleLog.innerHTML = evtData.logs.map(log => {
+                                const levelClass = `log-${log.level || 'INFO'}`;
+                                return `<div class="log-entry ${levelClass}">[${log.time}] [${log.level}] ${log.message}</div>`;
+                            }).join('');
+                            consoleLog.scrollTop = consoleLog.scrollHeight;
+                        }
+
                         if (evtData.status === 'completed') {
                             eventSource.close();
                             const downloadUrl = `/api/jobs/${jobId}/download`;
@@ -447,6 +514,7 @@ async def serve_ui():
                     };
                 } catch (err) {
                     statusMsg.innerText = `❌ Lỗi: ${err.message}`;
+                    consoleLog.innerHTML += `<div class="log-entry log-ERROR">[CLIENT ERROR] ${err.message}</div>`;
                 }
             };
         </script>

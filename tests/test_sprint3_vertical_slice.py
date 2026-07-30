@@ -60,6 +60,7 @@ def test_web_ui_glassmorphic_components_rendered():
     html_content = response.text
     assert "cropCanvas" in html_content
     assert "checkerboard-player" in html_content
+    assert "consoleLog" in html_content
     assert "Hardware Mode:" in html_content
     assert "CodeAvatar Generator" in html_content
 
