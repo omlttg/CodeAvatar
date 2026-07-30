@@ -108,7 +108,7 @@ CodeAvatar/
 ```bash
 ./run_docker.sh
 ```
-Truy cập trình duyệt tại địa chỉ: `http://localhost:8000`
+Truy cập trình duyệt tại địa chỉ: `http://localhost:8005`
 
 ### 2. Run Local Python Virtual Environment
 ```bash

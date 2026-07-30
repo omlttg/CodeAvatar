@@ -38,4 +38,4 @@
 
 ## Next Steps for Future Sessions
 1. Chạy bộ kiểm thử tự động qua `.venv/bin/python -m pytest tests/ -v` để xác nhận 100% pass.
-2. Khởi chạy hệ thống qua `./run_docker.sh` và trải nghiệm Web UI tại `http://localhost:8000`.
+2. Khởi chạy hệ thống qua `./run_docker.sh` và trải nghiệm Web UI tại `http://localhost:8005`.
