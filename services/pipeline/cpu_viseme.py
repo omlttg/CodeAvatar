@@ -12,6 +12,33 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
+class FrameSequence:
+    """
+    English: Lazy frame generator wrapper keeping RAM at O(1) constant memory while supporting len() and indexing.
+    Vietnamese: Wrapper generator lười giữ RAM ở mức O(1) cố định hỗ trợ hàm len() và truy vấn chỉ số.
+    """
+    def __init__(self, base_img: Image.Image, visemes: list, engine, crop_roi: dict = None):
+        self.base_img = base_img
+        self.visemes = visemes
+        self.engine = engine
+        self.crop_roi = crop_roi
+
+    def __len__(self):
+        return len(self.visemes)
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            if idx < 0:
+                idx += len(self.visemes)
+            if idx < 0 or idx >= len(self.visemes):
+                raise IndexError("Frame index out of range")
+            return self.engine.render_viseme_frame(self.base_img, self.visemes[idx], self.crop_roi)
+        raise TypeError("Invalid index type")
+
+    def __iter__(self):
+        for v in self.visemes:
+            yield self.engine.render_viseme_frame(self.base_img, v, self.crop_roi)
+
 class CPUVisemeEngine:
     """
     English: Core engine for generating viseme-based mouth animation overlays on CPU.
@@ -121,18 +148,18 @@ class CPUVisemeEngine:
                 bytes_per_sec = sample_rate * channels * (bits_per_sample // 8)
                 if bytes_per_sec > 0:
                     dur = (len(audio_bytes) - 44) / bytes_per_sec
-                    if 0.5 <= dur <= 3600.0:
+                    if 0.5 <= dur <= 600.0:
                         return dur
             except Exception:
                 pass
         # Fallback estimation based on average byte rate (~32KB/s for 16kHz 16-bit mono)
         dur = len(audio_bytes) / 32000.0
-        return max(1.0, min(dur, 3600.0))
+        return max(1.0, min(dur, 600.0))
 
     def process_sequence(self, avatar_image_path: str, audio_bytes: bytes, duration: float = None, crop_roi: dict = None):
         """
-        English: Generate full sequence of transparent frames in CPU memory.
-        Vietnamese: Sinh toàn bộ chuỗi khung hình nền trong suốt trên bộ nhớ CPU.
+        English: Generate full sequence of transparent frames lazily in memory.
+        Vietnamese: Sinh toàn bộ chuỗi khung hình nền trong suốt theo cơ chế lười.
         """
         start_time = time.time()
         if duration is None or duration <= 0:
@@ -149,11 +176,7 @@ class CPUVisemeEngine:
             draw.ellipse([180, 90, 210, 120], fill=(40, 40, 50, 255))   # Right eye
 
         visemes = self.extract_audio_visemes(audio_bytes, duration)
-        frames = []
-        
-        for v in visemes:
-            rendered = self.render_viseme_frame(base_img, v, crop_roi)
-            frames.append(rendered)
+        frames = FrameSequence(base_img, visemes, self, crop_roi)
 
         elapsed = time.time() - start_time
         return {

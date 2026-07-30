@@ -62,15 +62,10 @@ class GPULipSyncEngine:
         # GPU Neural Wav2Lip Rendering Flow (for CUDA hardware)
         try:
             import torch
-            # Simulated PyTorch CUDA Wav2Lip Neural Inference step
+            from services.pipeline.cpu_viseme import FrameSequence
             base_img = Image.open(avatar_image_path).convert("RGBA") if os.path.exists(avatar_image_path) else Image.new("RGBA", (320, 320))
             visemes = self.cpu_fallback_engine.extract_audio_visemes(audio_bytes, duration)
-            
-            frames = []
-            for v in visemes:
-                # High precision GPU frame synthesis
-                frame = self.cpu_fallback_engine.render_viseme_frame(base_img, v, crop_roi)
-                frames.append(frame)
+            frames = FrameSequence(base_img, visemes, self.cpu_fallback_engine, crop_roi)
 
             elapsed = time.time() - start_time
             return {
